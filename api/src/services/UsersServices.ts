@@ -27,17 +27,35 @@ class UsersServices{
         });
         return create;
     }
-    async update({ name, oldPassword, newPassword, avatar_url }: IUpdate ){
-        const uploadImage = avatar_url?.buffer;
-        const uploadS3 = await s3 
-        .upload({
-            Bucket: 'semana-heroi1',
-            Key: `${uuid()}-${avatar_url?.originalname}`,
-            // ACL: 'public-read',
-            Body: uploadImage,
-        })
-        .promise();
-        console.log('url imagem =>', uploadS3.Location);
+    async update({ name, oldPassword, newPassword, avatar_url, user_id }: IUpdate ){
+        let password
+        if (oldPassword && newPassword) {
+            const findUserById = await this.usersRepository.findUserById(user_id);
+            if (!findUserById) {
+                throw new Error('User not found.');
+            }
+            const passwordMatch = compare(oldPassword, findUserById.password);
+            if (!passwordMatch) {
+                throw new Error('Password invalid.');
+            }
+            password = await hash(newPassword, 10);
+            await this.usersRepository.updatePassword(password, user_id)
+        }
+        if (avatar_url) {
+            const uploadImage = avatar_url?.buffer;
+            const uploadS3 = await s3 
+            .upload({
+                Bucket: 'semana-heroi1',
+                Key: `${uuid()}-${avatar_url?.originalname}`,
+                // ACL: 'public-read',
+                Body: uploadImage,
+            })
+            .promise();
+            await this.usersRepository.update(name, uploadS3.Location, user_id);
+        }
+        return {
+            message: 'User updated successfully',
+        };
     }
     async auth(email: string, password: string){
         const findUser = await this.usersRepository.findUserByEmail(email);
